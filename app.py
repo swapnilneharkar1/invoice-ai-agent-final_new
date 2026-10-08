@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 
 import streamlit as st
 
 from app.config import load_settings
 from app.exporter import create_excel
+from app.models import InvoiceRecord
 from app.processor import process_invoice
 
 logging.basicConfig(level=logging.INFO)
@@ -48,12 +50,22 @@ if uploads:
     st.dataframe({"FileName": [item.name for item in uploads]}, use_container_width=True, hide_index=True)
 
 if st.button("Validate Invoices", type="primary", disabled=not uploads):
-    records = []
+    uploaded_files = [(upload.name, upload.getvalue()) for upload in uploads]
+    file_results: list[list[InvoiceRecord] | None] = [None] * len(uploaded_files)
     progress = st.progress(0, text="Starting validation")
-    for index, upload in enumerate(uploads):
-        progress.progress(index / len(uploads), text=f"Processing {upload.name}")
-        records.extend(process_invoice(upload.name, upload.getvalue(), settings))
-    progress.progress(1.0, text="Validation complete")
+    with ThreadPoolExecutor(max_workers=min(4, len(uploaded_files))) as executor:
+        futures = {
+            executor.submit(process_invoice, filename, data, settings): (index, filename)
+            for index, (filename, data) in enumerate(uploaded_files)
+        }
+        for completed, future in enumerate(as_completed(futures), start=1):
+            index, filename = futures[future]
+            file_results[index] = future.result()
+            progress.progress(
+                completed / len(uploaded_files),
+                text=f"Processed {filename} ({completed}/{len(uploaded_files)})",
+            )
+    records = [record for result in file_results if result is not None for record in result]
     st.session_state["records"] = records
 
 records = st.session_state.get("records")
