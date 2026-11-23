@@ -29,6 +29,7 @@ ACCESS_LIST = (
     "vishnu.rathod3@bizsupporta.com",
     "chaitanaya.bongane@bizsupporta.com",
     "krishnakant.harale@bizsupporta.com",
+    "rajesh.kulkarni@bajajfinserv.in"
 
 )
 
